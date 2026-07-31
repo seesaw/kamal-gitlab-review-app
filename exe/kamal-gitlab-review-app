@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'kamal_gitlab_review_app'
+
+script = File.expand_path('../lib/kamal_gitlab_review_app/ci/review_apps.sh', __dir__)
+exec('bash', script, *ARGV)

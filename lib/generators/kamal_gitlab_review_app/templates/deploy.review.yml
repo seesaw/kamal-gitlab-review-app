@@ -1,0 +1,32 @@
+# Review apps destination. Dynamic values are injected at deploy time by CI.
+# Extend env.secret, accessories and roles for your application.
+service: <%%= ENV.fetch("KAMAL_SERVICE") %>
+
+env:
+  secret:
+    - RAILS_MASTER_KEY
+    - DB_DATABASE
+
+servers:
+  web:
+    hosts:
+      - <%%= ENV.fetch("REVIEW_TARGET_IP") %>
+    proxy:
+      ssl: true
+      hosts:
+        - <%%= ENV.fetch("GENERAL_HOST") %>
+    env:
+      GENERAL_HOST: <%%= ENV.fetch("GENERAL_HOST") %>
+
+builder:
+  dockerfile: Dockerfile
+  args:
+    RAILS_ENV: staging
+  local: false
+  arch: x86_64
+  remote: ssh://<%%= ENV.fetch("REVIEW_SSH_USER", "deploy") %>@<%%= ENV.fetch("REVIEW_TARGET_IP") %>
+
+accessories:
+  db:
+    host: <%%= ENV.fetch("REVIEW_TARGET_IP") %>
+    image: postgres:17
