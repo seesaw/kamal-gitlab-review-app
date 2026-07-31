@@ -7,27 +7,44 @@ module KamalGitlabReviewApp
     # Removes leftover containers/volumes/images/dirs on the review host that Kamal's own
     # teardown (`kamal app remove`, `kamal accessory remove`) may miss (basecamp/kamal#516).
     # Ported from the former ci/cleanup_docker.sh remote heredoc.
+    #
+    # Matching is delimiter-aware (same idea as LifecycleDecider): prefix `app_mr_1` must
+    # not match `app_mr_10`.
     class DockerCleanup
       REMOTE_SCRIPT = <<~'REMOTE'
         set -euo pipefail
         SERVICE_PREFIX="$1"
 
-        docker ps -a --format '{{.Names}}' | while read -r container; do
-          case "${container}" in
-            "${SERVICE_PREFIX}"* ) docker rm -f "${container}" || true ;;
+        matches_service_resource() {
+          case "$1" in
+            "${SERVICE_PREFIX}"|"${SERVICE_PREFIX}-"*|"${SERVICE_PREFIX}_"* ) return 0 ;;
+            *) return 1 ;;
           esac
+        }
+
+        matches_service_image() {
+          case "$1" in
+            "${SERVICE_PREFIX}:"*|"${SERVICE_PREFIX}@"*|*/"${SERVICE_PREFIX}:"*|*/"${SERVICE_PREFIX}@"* ) return 0 ;;
+            *) return 1 ;;
+          esac
+        }
+
+        docker ps -a --format '{{.Names}}' | while read -r container; do
+          if matches_service_resource "${container}"; then
+            docker rm -f "${container}" || true
+          fi
         done
 
         docker volume ls --format '{{.Name}}' | while read -r volume; do
-          case "${volume}" in
-            "${SERVICE_PREFIX}"* ) docker volume rm "${volume}" || true ;;
-          esac
+          if matches_service_resource "${volume}"; then
+            docker volume rm "${volume}" || true
+          fi
         done
 
         docker image ls --format '{{.Repository}}:{{.Tag}}' | while read -r image; do
-          case "${image}" in
-            *"${SERVICE_PREFIX}"* ) docker image rm "${image}" || true ;;
-          esac
+          if matches_service_image "${image}"; then
+            docker image rm "${image}" || true
+          fi
         done
 
         # Kamal accessory host dirs (e.g. app_mr_42-db). `kamal accessory remove` runs plain

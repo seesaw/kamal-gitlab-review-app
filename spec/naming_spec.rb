@@ -20,5 +20,26 @@ RSpec.describe KamalGitlabReviewApp::Naming do
 
       expect { described_class.for_mr(iid: '1') }.to raise_error(KeyError, /REVIEW_DOMAIN/)
     end
+
+    it 'derives db_host from the first REVIEW_ACCESSORIES entry' do
+      ENV['REVIEW_ACCESSORIES'] = 'postgres,redis'
+
+      expect(described_class.for_mr(iid: '5')[:db_host]).to eq('app_mr_5-postgres')
+    end
+
+    it 'prefers REVIEW_DB_ACCESSORY over the accessories list' do
+      ENV['REVIEW_ACCESSORIES'] = 'redis,db'
+      ENV['REVIEW_DB_ACCESSORY'] = 'db'
+
+      expect(described_class.for_mr(iid: '5')[:db_host]).to eq('app_mr_5-db')
+    ensure
+      ENV.delete('REVIEW_DB_ACCESSORY')
+    end
+
+    it 'omits db_host when there are no accessories' do
+      ENV['REVIEW_ACCESSORIES'] = 'none'
+
+      expect(described_class.for_mr(iid: '5')).not_to have_key(:db_host)
+    end
   end
 end

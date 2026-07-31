@@ -11,6 +11,7 @@ The gem **does not require Rails**: configuration is entirely ENV-driven, so it 
 ### 1. Add the gem to your Gemfile
 
 ```ruby
+gem 'kamal'
 gem 'kamal-gitlab-review-app' # or: git: 'https://github.com/seesaw/kamal-gitlab-review-app'
 ```
 
@@ -19,6 +20,8 @@ Then:
 ```bash
 bundle install
 ```
+
+`kamal` must be available via `bundle exec` in the host project — this gem shells out to it during deploy/stop.
 
 ### 2. Generate project files (optional, Rails only)
 
@@ -47,12 +50,13 @@ All configuration is read from `ENV` — there is no `Configuration` object and 
 | `REVIEW_HOST_LABEL_PREFIX` | `mr` | Host label prefix (`mr-<iid>.…`) |
 | `REVIEW_DNS_PROVIDER` | `cloudflare` | Registered DNS provider key (see [docs/dns-providers.md](docs/dns-providers.md)) |
 | `REVIEW_ACCESSORIES` | `db` | Comma-separated Kamal accessory names to remove on stop; `none` or empty means no accessories |
+| `REVIEW_DB_ACCESSORY` | first accessory | Accessory name used for `DB_HOST` (`#{service}-#{accessory}`). Set when the DB accessory is not first in `REVIEW_ACCESSORIES` |
 | `REVIEW_SSH_USER` | `deploy` | SSH user for remote lifecycle checks and Docker cleanup |
 | `REVIEW_TARGET_IP` | *(required)* | Review host IP (DNS target + SSH lifecycle checks) |
 | `REVIEW_DNS_TTL` | `120` | DNS record TTL, in seconds |
 | `CI_MERGE_REQUEST_IID` | *(required)* | GitLab MR IID; used to derive all per-MR names |
 | `KAMAL_GITLAB_REVIEW_APP_PROJECT_ROOT` | current dir | Directory containing `.kamal/` and `config/deploy.review.yml` |
-| `SECRETS_REVIEW_FILE` | *(required for deploy)* | Path to a file with secrets shared by all review apps |
+| `SECRETS_REVIEW_FILE` | *(required for deploy)* | Path to a secrets template copied to `.kamal/secrets.review` (mode `0600`); per-MR runtime vars are appended |
 
 DNS-provider-specific variables (e.g. `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`) are documented per-provider in [docs/dns-providers.md](docs/dns-providers.md).
 
@@ -114,9 +118,11 @@ stop_review_on_merge_or_close:
 2. **Redeploy for an MR**: upsert DNS → `kamal deploy -d review`
 3. **Stop**: `kamal app remove` → remove each configured accessory → delete DNS → remote Docker cleanup scoped to the MR's service
 
-Deploy is **fail loud**: any failed step (writing runtime env, DNS upsert, `kamal setup`/`deploy`, etc.) raises and aborts the CI job.
+Deploy is **fail loud**: any failed step (writing runtime env, DNS upsert, `kamal setup`/`deploy`, etc.) aborts with a non-zero exit and a short message on stderr.
 
-Stop is **best-effort**: every step is independent — a failure in one (e.g. Kamal app already removed, DNS record already gone) is logged to stderr and does not prevent the remaining steps from running. `stop` always exits `0`.
+Stop is **best-effort**: every step is independent — a failure in one (e.g. Kamal app already removed, DNS record already gone) is logged to stderr and does not prevent the remaining steps from running. Exit `0` if at least one top-level step succeeded; exit `1` only when every step failed. Keep `allow_failure: true` on the GitLab `stop_review` job.
+
+Runtime env written to `.kamal/review.env` (and appended to `.kamal/secrets.review`) includes `GENERAL_HOST`, `KAMAL_SERVICE`, and `DB_HOST` when a DB accessory is configured. With `REVIEW_ACCESSORIES=none`, `DB_HOST` is omitted.
 
 > **SSH-failure caveat**: the remote `docker ps` check used to decide `setup` vs `deploy` treats any SSH/connection failure as "no containers found", which means the deploy falls back to `kamal setup`. This is intentional — a brand-new host has no containers yet — but it also means a genuinely broken SSH connection silently triggers `setup` instead of failing. Check the CI logs if a deploy runs `setup` unexpectedly.
 

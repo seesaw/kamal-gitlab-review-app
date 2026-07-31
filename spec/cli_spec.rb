@@ -13,10 +13,41 @@ RSpec.describe KamalGitlabReviewApp::CLI do
       expect(status).to eq(0)
     end
 
+    it 'prints usage and returns 0 when no command is given' do
+      status = nil
+      expect { status = described_class.run([]) }.to output(/Usage: kamal-gitlab-review-app/).to_stdout
+      expect(status).to eq(0)
+    end
+
     it 'returns non-zero and warns for an unknown command' do
       status = nil
       expect { status = described_class.run(['bogus']) }.to output(/Unknown command: "bogus"/).to_stderr
       expect(status).not_to eq(0)
+    end
+
+    it 'returns 1 with a clean message when deploy raises' do
+      allow(KamalGitlabReviewApp::CLI::Deploy).to receive(:call)
+        .and_raise(KamalGitlabReviewApp::CLI::Deploy::Error, 'Command failed: kamal setup')
+
+      status = nil
+      expect { status = described_class.run(['deploy']) }
+        .to output(/kamal-gitlab-review-app deploy: Command failed: kamal setup/).to_stderr
+      expect(status).to eq(1)
+    end
+
+    it 'returns 1 when deploy is missing required ENV' do
+      allow(KamalGitlabReviewApp::CLI::Deploy).to receive(:call).and_raise(KeyError, 'key not found: "CI_MERGE_REQUEST_IID"')
+
+      status = nil
+      expect { status = described_class.run(['deploy']) }
+        .to output(/kamal-gitlab-review-app deploy: key not found: "CI_MERGE_REQUEST_IID"/).to_stderr
+      expect(status).to eq(1)
+    end
+
+    it 'returns 1 when stop reports that every step failed' do
+      allow(KamalGitlabReviewApp::CLI::Stop).to receive(:call).and_return(false)
+
+      expect(described_class.run(['stop'])).to eq(1)
     end
 
     it 'prints KAMAL_SERVICE for runtime-env with an explicit IID' do
@@ -116,8 +147,10 @@ RSpec.describe KamalGitlabReviewApp::CLI do
       described_class.call(runner:, container_lister:)
 
       expect(File.read(File.join(@project_root, '.kamal/review.env'))).to include('KAMAL_SERVICE=app_mr_42')
-      expect(File.read(File.join(@project_root, '.kamal/secrets.review')))
+      secrets_path = File.join(@project_root, '.kamal/secrets.review')
+      expect(File.read(secrets_path))
         .to eq("RAILS_MASTER_KEY=abc\nGENERAL_HOST=mr-42.review.example.com\nKAMAL_SERVICE=app_mr_42\nDB_HOST=app_mr_42-db\n")
+      expect(File.stat(secrets_path).mode & 0o777).to eq(0o600)
       expect(fake_dns_provider_class.upserts).to eq([{ name: 'mr-42.review.example.com', ip: '203.0.113.10', ttl: 120 }])
       expect(commands).to eq([
                                 %w[bundle exec kamal registry setup -d review],
@@ -219,11 +252,22 @@ RSpec.describe KamalGitlabReviewApp::CLI do
       expect(fake_dns_provider_class.deletes).to eq([{ name: 'mr-42.review.example.com' }])
     end
 
-    it 'never raises when every step fails' do
+    it 'never raises when every step fails, and reports overall failure' do
       runner = ->(*, **) { false }
       allow(KamalGitlabReviewApp::Dns::Registry).to receive(:resolve).and_raise('dns down')
 
-      expect { expect { described_class.call(runner:) }.not_to raise_error }.to output.to_stderr
+      result = nil
+      expect { result = described_class.call(runner:) }.to output.to_stderr
+      expect(result).to be(false)
+    end
+
+    it 'returns true when at least one teardown step succeeds' do
+      runner = lambda { |*cmd, **| cmd.first != 'bundle' }
+      allow(KamalGitlabReviewApp::Dns::Registry).to receive(:resolve).and_raise('dns down')
+
+      result = nil
+      expect { result = described_class.call(runner:) }.to output.to_stderr
+      expect(result).to be(true)
     end
 
     it 'still attempts DNS delete and docker cleanup after a kamal command fails' do

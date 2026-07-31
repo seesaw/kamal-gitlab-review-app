@@ -10,6 +10,8 @@ module KamalGitlabReviewApp
       include Provider
 
       API_BASE_URL = 'https://api.cloudflare.com/client/v4'
+      OPEN_TIMEOUT = 10
+      READ_TIMEOUT = 30
 
       def self.build_a_payload(name:, ip:, ttl:)
         { type: 'A', name:, content: ip, ttl:, proxied: false }
@@ -45,10 +47,33 @@ module KamalGitlabReviewApp
         uri = URI("#{API_BASE_URL}#{path}")
         http = Net::HTTP.new(uri.host, uri.port)
         http.use_ssl = true
+        http.open_timeout = OPEN_TIMEOUT
+        http.read_timeout = READ_TIMEOUT
 
         request = net_http_request(method, uri, payload)
         response = http.request(request)
-        parsed = JSON.parse(response.body)
+        parse_cloudflare_response!(response)
+      rescue Dns::Error
+        raise
+      rescue Net::OpenTimeout, Net::ReadTimeout => e
+        raise Dns::Error, "Cloudflare request timed out: #{e.class}"
+      rescue SocketError, Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::EHOSTUNREACH, EOFError => e
+        raise Dns::Error, "Cloudflare network error: #{e.class}: #{e.message}"
+      end
+
+      def parse_cloudflare_response!(response)
+        status = response.code.to_i
+        body = response.body.to_s
+
+        begin
+          parsed = JSON.parse(body)
+        rescue JSON::ParserError
+          raise Dns::Error, "Cloudflare request failed: HTTP #{status}, non-JSON body"
+        end
+
+        unless status.between?(200, 299)
+          raise Dns::Error, "Cloudflare request failed: HTTP #{status}: #{parsed}"
+        end
 
         raise Dns::Error, "Cloudflare request failed: #{parsed}" unless parsed['success']
 

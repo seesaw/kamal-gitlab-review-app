@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'open3'
+require 'shellwords'
+
 RSpec.describe KamalGitlabReviewApp::Remote::DockerCleanup do
   include_context 'with review app env'
 
@@ -56,10 +59,63 @@ RSpec.describe KamalGitlabReviewApp::Remote::DockerCleanup do
     it 'guards container, volume, and image removal by the service prefix' do
       script = described_class::REMOTE_SCRIPT
 
-      expect(script).to include('"${SERVICE_PREFIX}"*')
+      expect(script).to include('matches_service_resource')
+      expect(script).to include('matches_service_image')
+      expect(script).not_to include('"${SERVICE_PREFIX}"*')
       expect(script).to include('docker rm -f')
       expect(script).to include('docker volume rm')
       expect(script).to include('docker image rm')
     end
+
+    it 'matches only the exact MR service prefix (not app_mr_10 for app_mr_1)' do
+      matched = bash_match_resources(
+        'app_mr_1',
+        %w[app_mr_1 app_mr_1-web app_mr_1_worker app_mr_10-web app_mr_11-db app_mr_1x-web other_app_mr_1-web]
+      )
+
+      expect(matched).to eq(%w[app_mr_1 app_mr_1-web app_mr_1_worker])
+    end
+
+    it 'matches images for the exact service prefix only' do
+      matched = bash_match_images(
+        'app_mr_1',
+        %w[
+          app_mr_1:abc
+          registry.example/app_mr_1:abc
+          app_mr_10:abc
+          registry.example/app_mr_10:abc
+          other/app_mr_1@sha256:deadbeef
+        ]
+      )
+
+      expect(matched).to eq(%w[app_mr_1:abc registry.example/app_mr_1:abc other/app_mr_1@sha256:deadbeef])
+    end
+  end
+
+  def bash_match_resources(prefix, names)
+    bash_filter(prefix, names, 'matches_service_resource')
+  end
+
+  def bash_match_images(prefix, names)
+    bash_filter(prefix, names, 'matches_service_image')
+  end
+
+  def bash_filter(prefix, names, matcher)
+    script = <<~BASH
+      set -euo pipefail
+      SERVICE_PREFIX=#{Shellwords.escape(prefix)}
+      #{described_class::REMOTE_SCRIPT[/matches_service_resource\(\) \{.*?\n\}/m]}
+      #{described_class::REMOTE_SCRIPT[/matches_service_image\(\) \{.*?\n\}/m]}
+      for name in #{Shellwords.join(names)}; do
+        if #{matcher} "$name"; then
+          printf '%s\n' "$name"
+        fi
+      done
+    BASH
+
+    stdout, status = Open3.capture2('bash', '-c', script)
+    raise "bash matcher failed:\n#{stdout}" unless status.success?
+
+    stdout.split("\n")
   end
 end

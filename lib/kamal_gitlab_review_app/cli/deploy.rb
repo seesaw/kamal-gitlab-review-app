@@ -60,10 +60,12 @@ module KamalGitlabReviewApp
 
       def write_secrets_review(runtime_env)
         secrets_file = ENV.fetch('SECRETS_REVIEW_FILE')
-        FileUtils.cp(secrets_file, '.kamal/secrets.review')
-        File.open('.kamal/secrets.review', 'a') do |file|
+        destination = '.kamal/secrets.review'
+        FileUtils.cp(secrets_file, destination)
+        File.open(destination, 'a') do |file|
           runtime_env.each { |key, value| file.puts "#{key}=#{value}" }
         end
+        File.chmod(0o600, destination)
       end
 
       def export_runtime_env(runtime_env)

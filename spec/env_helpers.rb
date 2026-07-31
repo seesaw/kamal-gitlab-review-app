@@ -5,6 +5,7 @@ RSpec.shared_context 'with review app env' do
     keys = %w[
       REVIEW_DOMAIN REVIEW_SERVICE_PREFIX REVIEW_ENVIRONMENT_PREFIX
       REVIEW_HOST_LABEL_PREFIX REVIEW_DNS_PROVIDER REVIEW_ACCESSORIES
+      REVIEW_DB_ACCESSORY
     ]
     previous = keys.to_h { |key| [key, ENV[key]] }
 
@@ -14,6 +15,7 @@ RSpec.shared_context 'with review app env' do
     ENV.delete('REVIEW_HOST_LABEL_PREFIX')
     ENV.delete('REVIEW_DNS_PROVIDER')
     ENV.delete('REVIEW_ACCESSORIES')
+    ENV.delete('REVIEW_DB_ACCESSORY')
 
     example.run
   ensure

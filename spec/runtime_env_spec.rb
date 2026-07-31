@@ -13,6 +13,15 @@ RSpec.describe KamalGitlabReviewApp::RuntimeEnv do
         'KAMAL_SERVICE' => 'app_mr_91'
       )
     end
+
+    it 'omits DB_HOST when there are no accessories' do
+      ENV['REVIEW_ACCESSORIES'] = 'none'
+
+      expect(described_class.to_h(iid: '91')).to eq(
+        'GENERAL_HOST' => 'mr-91.review.example.com',
+        'KAMAL_SERVICE' => 'app_mr_91'
+      )
+    end
   end
 
   describe '.default_hash' do

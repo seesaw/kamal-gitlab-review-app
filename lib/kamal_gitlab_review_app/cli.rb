@@ -26,15 +26,13 @@ module KamalGitlabReviewApp
       command, *args = argv
 
       case command
-      when '-h', '--help', 'help'
+      when nil, '', '-h', '--help', 'help'
         puts USAGE
         0
       when 'deploy'
-        Deploy.call
-        0
+        run_deploy
       when 'stop'
-        Stop.call
-        0
+        Stop.call ? 0 : 1
       when 'runtime-env'
         print_runtime_env(args)
         0
@@ -55,6 +53,14 @@ module KamalGitlabReviewApp
         warn USAGE
         1
       end
+    end
+
+    def run_deploy
+      Deploy.call
+      0
+    rescue Deploy::Error, KeyError, KamalGitlabReviewApp::Dns::Error => e
+      warn "kamal-gitlab-review-app deploy: #{e.message}"
+      1
     end
 
     def mr_iid(args)
