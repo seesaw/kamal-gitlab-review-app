@@ -2,6 +2,6 @@
 # frozen_string_literal: true
 
 require 'kamal_gitlab_review_app'
+require 'kamal_gitlab_review_app/cli'
 
-script = File.expand_path('../lib/kamal_gitlab_review_app/ci/review_apps.sh', __dir__)
-exec('bash', script, *ARGV)
+exit KamalGitlabReviewApp::CLI.run(ARGV)

@@ -1,62 +1,62 @@
 # kamal-gitlab-review-app
 
-Gem per deployare e distruggere **review app per Merge Request** su GitLab usando [Kamal](https://kamal-deploy.org/) e DNS Cloudflare.
+A gem for deploying and tearing down **per-Merge-Request review apps** on GitLab using [Kamal](https://kamal-deploy.org/), with pluggable DNS.
 
-Ogni MR ottiene un ambiente isolato con hostname dedicato (`mr-<iid>.<review-domain>`), database dedicato e lifecycle manuale/automatico da pipeline GitLab.
+Each MR gets an isolated environment with a dedicated hostname (`mr-<iid>.<review-domain>`), a dedicated database accessory, and a lifecycle driven manually or automatically from the GitLab pipeline.
 
-La gem **non richiede Rails**: la configurazione avviene solo via variabili d'ambiente (adatta anche a progetti non-Rails che usano Kamal).
+The gem **does not require Rails**: configuration is entirely ENV-driven, so it also works for non-Rails projects deployed with Kamal.
 
-## Installazione
+## Install
 
-### 1. Aggiungi la gem al Gemfile
+### 1. Add the gem to your Gemfile
 
 ```ruby
 gem 'kamal-gitlab-review-app' # or: git: 'https://github.com/seesaw/kamal-gitlab-review-app'
 ```
 
-Poi:
+Then:
 
 ```bash
 bundle install
 ```
 
-### 2. Genera i file di progetto (opzionale, se usi Rails)
+### 2. Generate project files (optional, Rails only)
 
 ```bash
 bin/rails generate kamal_gitlab_review_app:install
 ```
 
-Genera:
+This generates:
 
-- `config/deploy.review.yml` (template minimale Kamal destination)
-- `bin/review-apps` (wrapper verso `bundle exec kamal-gitlab-review-app`)
+- `config/deploy.review.yml` — a minimal Kamal destination template
+- `bin/review-apps` — a wrapper around `bundle exec kamal-gitlab-review-app`
 
-In alternativa copia a mano `bin/review-apps` e il template `deploy.review.yml` dalla gem.
+Without Rails, copy `bin/review-apps` and the `deploy.review.yml` template from the gem by hand.
 
-Personalizza `config/deploy.review.yml` con secrets, ruoli (`jobs`), volumi e accessory specifici della tua app.
+Customize `config/deploy.review.yml` with your app's secrets, roles (`servers`), volumes, and accessories.
 
-### 3. Configura naming via ENV
+## Configuration (ENV)
 
-| Variabile | Default | Descrizione |
-|-----------|---------|-------------|
-| `REVIEW_DOMAIN` | *(required)* | Dominio review (es. `review.example.com`) |
-| `REVIEW_SERVICE_PREFIX` | `app_mr` | Prefisso service/container Kamal |
-| `REVIEW_ENVIRONMENT_PREFIX` | `review/mr` | Prefisso environment GitLab |
-| `REVIEW_HOST_LABEL_PREFIX` | `mr` | Prefisso label host (`mr-<iid>.…`) |
+All configuration is read from `ENV` — there is no `Configuration` object and no initializer.
 
-## Variabili GitLab CI richieste
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REVIEW_DOMAIN` | *(required)* | Review domain (e.g. `review.example.com`) |
+| `REVIEW_SERVICE_PREFIX` | `app_mr` | Kamal service/container name prefix |
+| `REVIEW_ENVIRONMENT_PREFIX` | `review/mr` | GitLab environment name prefix |
+| `REVIEW_HOST_LABEL_PREFIX` | `mr` | Host label prefix (`mr-<iid>.…`) |
+| `REVIEW_DNS_PROVIDER` | `cloudflare` | Registered DNS provider key (see [docs/dns-providers.md](docs/dns-providers.md)) |
+| `REVIEW_ACCESSORIES` | `db` | Comma-separated Kamal accessory names to remove on stop; `none` or empty means no accessories |
+| `REVIEW_SSH_USER` | `deploy` | SSH user for remote lifecycle checks and Docker cleanup |
+| `REVIEW_TARGET_IP` | *(required)* | Review host IP (DNS target + SSH lifecycle checks) |
+| `REVIEW_DNS_TTL` | `120` | DNS record TTL, in seconds |
+| `CI_MERGE_REQUEST_IID` | *(required)* | GitLab MR IID; used to derive all per-MR names |
+| `KAMAL_GITLAB_REVIEW_APP_PROJECT_ROOT` | current dir | Directory containing `.kamal/` and `config/deploy.review.yml` |
+| `SECRETS_REVIEW_FILE` | *(required for deploy)* | Path to a file with secrets shared by all review apps |
 
-| Variabile | Tipo | Descrizione |
-|-----------|------|-------------|
-| `SECRETS_REVIEW_FILE` | File | Secrets Kamal condivisi per tutte le review app |
-| `CLOUDFLARE_API_TOKEN` | Masked | Token API Cloudflare |
-| `CLOUDFLARE_ZONE_ID` | Masked | Zone ID Cloudflare |
-| `REVIEW_TARGET_IP` | Variable | IP host deploy (DNS + SSH lifecycle check) |
-| `REVIEW_DNS_TTL` | Variable | TTL DNS (default `120`) |
-| `REVIEW_DOMAIN` | Variable | Dominio review |
-| `REVIEW_SERVICE_PREFIX` | Variable | Prefisso service |
+DNS-provider-specific variables (e.g. `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`) are documented per-provider in [docs/dns-providers.md](docs/dns-providers.md).
 
-## Snippet `.gitlab-ci.yml`
+## `.gitlab-ci.yml` snippet
 
 ```yaml
 deploy_review:
@@ -67,6 +67,8 @@ deploy_review:
     REVIEW_DNS_TTL: "120"
     REVIEW_DOMAIN: "review.example.com"
     REVIEW_SERVICE_PREFIX: "myapp_mr"
+    # REVIEW_DNS_PROVIDER: "cloudflare"
+    # REVIEW_ACCESSORIES: "db,redis"
   environment:
     name: review/mr-$CI_MERGE_REQUEST_IID
     url: https://mr-$CI_MERGE_REQUEST_IID.review.example.com
@@ -108,13 +110,19 @@ stop_review_on_merge_or_close:
 
 ## Lifecycle
 
-1. **Primo deploy MR**: upsert DNS → check container remoti via SSH → `kamal setup -d review`
-2. **Redeploy MR**: upsert DNS → `kamal deploy -d review`
-3. **Stop**: `kamal app remove` → delete DNS → cleanup Docker remoto mirato al service MR
+1. **First deploy for an MR**: upsert DNS → check remote containers over SSH → `kamal setup -d review`
+2. **Redeploy for an MR**: upsert DNS → `kamal deploy -d review`
+3. **Stop**: `kamal app remove` → remove each configured accessory → delete DNS → remote Docker cleanup scoped to the MR's service
+
+Deploy is **fail loud**: any failed step (writing runtime env, DNS upsert, `kamal setup`/`deploy`, etc.) raises and aborts the CI job.
+
+Stop is **best-effort**: every step is independent — a failure in one (e.g. Kamal app already removed, DNS record already gone) is logged to stderr and does not prevent the remaining steps from running. `stop` always exits `0`.
+
+> **SSH-failure caveat**: the remote `docker ps` check used to decide `setup` vs `deploy` treats any SSH/connection failure as "no containers found", which means the deploy falls back to `kamal setup`. This is intentional — a brand-new host has no containers yet — but it also means a genuinely broken SSH connection silently triggers `setup` instead of failing. Check the CI logs if a deploy runs `setup` unexpectedly.
 
 ## CLI
 
-Configurazione solo via ENV (nessun boot Rails):
+Configuration is ENV-only (no Rails boot required):
 
 ```bash
 REVIEW_DOMAIN=review.example.com \
@@ -126,17 +134,22 @@ bin/review-apps stop
 bin/review-apps decide 123
 bin/review-apps dns-upsert 123
 bin/review-apps dns-delete 123
+bin/review-apps docker-cleanup 123 # debug CLI; also runs automatically as part of `stop`
 ```
 
-Equivalente diretto:
+Equivalent direct invocation:
 
 ```bash
 bundle exec kamal-gitlab-review-app deploy
 ```
 
-## Test
+## Writing a custom DNS provider
 
-Dalla directory della gem:
+DNS providers are pluggable — see [docs/dns-providers.md](docs/dns-providers.md) for the provider contract and how to register your own from an external gem. Cloudflare (`KamalGitlabReviewApp::Dns::Cloudflare`) ships as the reference implementation.
+
+## Tests
+
+From the gem directory:
 
 ```bash
 bundle install

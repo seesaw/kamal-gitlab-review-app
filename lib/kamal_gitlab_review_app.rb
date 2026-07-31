@@ -8,6 +8,7 @@ require_relative 'kamal_gitlab_review_app/lifecycle_decider'
 require_relative 'kamal_gitlab_review_app/dns/provider'
 require_relative 'kamal_gitlab_review_app/dns/registry'
 require_relative 'kamal_gitlab_review_app/dns/cloudflare'
+require_relative 'kamal_gitlab_review_app/remote/docker_cleanup'
 
 module KamalGitlabReviewApp
   Dns::Registry.register(:cloudflare, Dns::Cloudflare)
