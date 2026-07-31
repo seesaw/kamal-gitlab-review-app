@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
+require 'webmock/rspec'
 require 'kamal_gitlab_review_app'
 require_relative 'env_helpers'
 

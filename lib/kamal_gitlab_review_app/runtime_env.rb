@@ -5,9 +5,14 @@ module KamalGitlabReviewApp
     class << self
       def to_h(iid:, overrides: {})
         names = KamalGitlabReviewApp::Naming.for_mr(iid:)
-        defaults = KamalGitlabReviewApp.configuration.default_runtime_env(names)
 
-        defaults.merge(stringify_keys(overrides))
+        default_hash(names).merge(stringify_keys(overrides))
+      end
+
+      # Only values that must differ per MR. DB_* names stay in SECRETS_REVIEW_FILE:
+      # each review app has its own Postgres accessory container.
+      def default_hash(names)
+        KamalGitlabReviewApp::Env.default_runtime_env(names)
       end
 
       private

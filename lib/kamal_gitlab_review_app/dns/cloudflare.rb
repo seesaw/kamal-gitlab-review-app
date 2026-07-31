@@ -5,18 +5,18 @@ require 'net/http'
 require 'uri'
 
 module KamalGitlabReviewApp
-  class CloudflareDns
-    API_BASE_URL = 'https://api.cloudflare.com/client/v4'
+  module Dns
+    class Cloudflare
+      include Provider
 
-    class Error < StandardError; end
+      API_BASE_URL = 'https://api.cloudflare.com/client/v4'
 
-    class << self
-      def build_a_payload(name:, ip:, ttl:)
+      def self.build_a_payload(name:, ip:, ttl:)
         { type: 'A', name:, content: ip, ttl:, proxied: false }
       end
 
       def upsert_a_record!(name:, ip:, ttl: 120)
-        payload = build_a_payload(name:, ip:, ttl:)
+        payload = self.class.build_a_payload(name:, ip:, ttl:)
         record = find_record_by_name(name:)
 
         if record
@@ -50,7 +50,7 @@ module KamalGitlabReviewApp
         response = http.request(request)
         parsed = JSON.parse(response.body)
 
-        raise Error, "Cloudflare request failed: #{parsed}" unless parsed['success']
+        raise Dns::Error, "Cloudflare request failed: #{parsed}" unless parsed['success']
 
         parsed
       end

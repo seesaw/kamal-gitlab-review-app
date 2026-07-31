@@ -7,5 +7,6 @@ ip = ENV.fetch('REVIEW_TARGET_IP')
 ttl = ENV.fetch('REVIEW_DNS_TTL', '120').to_i
 host = KamalGitlabReviewApp::Naming.for_mr(iid:).fetch(:host)
 
-KamalGitlabReviewApp::CloudflareDns.upsert_a_record!(name: host, ip:, ttl:)
+provider = KamalGitlabReviewApp::Dns::Registry.resolve
+provider.upsert_a_record!(name: host, ip:, ttl:)
 puts "dns_upsert:#{host}"

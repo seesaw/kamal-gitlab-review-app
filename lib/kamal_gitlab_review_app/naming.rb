@@ -5,12 +5,11 @@ module KamalGitlabReviewApp
     class << self
       def for_mr(iid:)
         iid_str = normalize_iid(iid)
-        config = KamalGitlabReviewApp.configuration
-        service = "#{config.service_prefix}_#{iid_str}"
+        service = "#{KamalGitlabReviewApp::Env.service_prefix}_#{iid_str}"
 
         {
-          environment_name: "#{config.environment_prefix}-#{iid_str}",
-          host: "#{config.host_label_prefix}-#{iid_str}.#{config.review_domain!}",
+          environment_name: "#{KamalGitlabReviewApp::Env.environment_prefix}-#{iid_str}",
+          host: "#{KamalGitlabReviewApp::Env.host_label_prefix}-#{iid_str}.#{KamalGitlabReviewApp::Env.review_domain}",
           service: service,
           # Kamal accessory container name is "#{service}-#{accessory}" (see Kamal::Configuration::Accessory#service_name).
           db_host: "#{service}-db"

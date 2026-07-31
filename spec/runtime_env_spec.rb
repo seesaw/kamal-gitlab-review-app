@@ -8,9 +8,21 @@ RSpec.describe KamalGitlabReviewApp::RuntimeEnv do
       env = described_class.to_h(iid: '91')
 
       expect(env).to eq(
-        'GENERAL_HOST' => 'mr-91.review.circle.seesaw.it',
-        'DB_HOST' => 'circle_backoffice_mr_91-db',
-        'KAMAL_SERVICE' => 'circle_backoffice_mr_91'
+        'GENERAL_HOST' => 'mr-91.review.example.com',
+        'DB_HOST' => 'app_mr_91-db',
+        'KAMAL_SERVICE' => 'app_mr_91'
+      )
+    end
+  end
+
+  describe '.default_hash' do
+    it 'returns GENERAL_HOST/KAMAL_SERVICE/DB_HOST for the MR names' do
+      names = KamalGitlabReviewApp::Naming.for_mr(iid: '91')
+
+      expect(described_class.default_hash(names)).to eq(
+        'GENERAL_HOST' => 'mr-91.review.example.com',
+        'KAMAL_SERVICE' => 'app_mr_91',
+        'DB_HOST' => 'app_mr_91-db'
       )
     end
   end
