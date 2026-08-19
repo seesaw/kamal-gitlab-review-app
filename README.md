@@ -12,7 +12,7 @@ The gem **does not require Rails**: configuration is entirely ENV-driven, so it 
 
 ```ruby
 gem 'kamal'
-gem 'kamal-gitlab-review-app' # or: git: 'https://github.com/seesaw/kamal-gitlab-review-app'
+gem 'kamal-gitlab-review-app'
 ```
 
 Then:

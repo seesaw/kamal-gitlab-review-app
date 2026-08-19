@@ -15,6 +15,8 @@ Gem::Specification.new do |spec|
   spec.metadata['homepage_uri'] = spec.homepage
   spec.metadata['source_code_uri'] = 'https://github.com/seesaw/kamal-gitlab-review-app'
   spec.metadata['changelog_uri'] = 'https://github.com/seesaw/kamal-gitlab-review-app/blob/main/CHANGELOG.md'
+  spec.metadata['allowed_push_host'] = 'https://rubygems.org'
+  spec.metadata['bug_tracker_uri'] = 'https://github.com/seesaw/kamal-gitlab-review-app/issues'
   spec.metadata['rubygems_mfa_required'] = 'true'
 
   spec.files = Dir.chdir(__dir__) do
