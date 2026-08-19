@@ -5,8 +5,8 @@ require_relative 'lib/kamal_gitlab_review_app/version'
 Gem::Specification.new do |spec|
   spec.name          = 'kamal-gitlab-review-app'
   spec.version       = KamalGitlabReviewApp::VERSION
-  spec.authors       = ['Seesaw']
-  spec.email         = ['dev@seesaw.it']
+  spec.authors       = ['Nicola Pagiaro']
+  spec.email         = ['nicola.pagiaro@seesaw.it']
   spec.summary       = 'GitLab MR review apps lifecycle for Kamal deployments'
   spec.description   = 'Deploy and teardown per-merge-request review environments with Kamal, pluggable DNS, and GitLab CI.'
   spec.license       = 'MIT'
