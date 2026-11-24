@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - Add guarded `reset` lifecycle command with configurable application command, deployed-version retry, and single-host Kamal role validation.
 - Share runtime/secret preparation between deploy and reset, including templates without a trailing newline.
