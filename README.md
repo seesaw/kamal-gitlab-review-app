@@ -112,6 +112,77 @@ stop_review_on_merge_or_close:
     - when: never
 ```
 
+## Resetting review data
+
+`bin/review-apps reset` stops the deployed application, runs an explicitly configured
+command once in a temporary container of the **deployed version**, then restarts
+that version only after success. It does not deploy the pipeline commit, change
+DNS, remove accessories, or choose a database reset strategy.
+
+```yaml
+reset_review:
+  extends: .review_manual_job # your existing deployment prerequisites and variables
+  resource_group: review-mr-$CI_MERGE_REQUEST_IID
+  variables:
+    REVIEW_RESET_COMMAND: "bin/rails review_apps:reset"
+  environment:
+    name: review/mr-$CI_MERGE_REQUEST_IID
+    action: prepare
+  script:
+    - bin/review-apps reset
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_IID'
+      when: manual
+      allow_failure: true
+```
+
+Use the **same resource group** on deploy, stop, and reset jobs. Keep your normal
+branch exclusions. CI serialization does not protect against concurrent manual
+Kamal commands; do not run them during reset.
+
+The application must supply the reset command in the deployed image and guard its
+own destructive operations (review marker, environment, and every database or
+external service it touches). For example, a Rails task can validate isolation,
+truncate databases, and invoke the application's seed mechanism. Rails and SeedFu
+are not required by this gem. External storage cleanup is the application's policy.
+
+### Requirements and configuration
+
+- `REVIEW_RESET_COMMAND` is required, with no destructive default. It is parsed as
+  shell words and passed as escaped arguments; shell expansion, pipes and redirects
+  are not interpreted. Use a checked-in script for compound operations.
+- `SECRETS_REVIEW_FILE`, `CI_MERGE_REQUEST_IID`, `REVIEW_DOMAIN` and
+  `REVIEW_TARGET_IP` are required, as for deploy. Runtime files are prepared using
+  the same naming and secret handling as deploy. No DNS API credentials are needed.
+- Kamal 2.11 is tested. Kamal must be in the application's bundle; reset loads its
+  configuration API without booting Rails.
+- The effective `review` service must match the gem's MR naming. Roles and primary
+  role come from the merged Kamal configuration, not fixed `web`/`jobs` names.
+- All application roles must run on one host equal to `REVIEW_TARGET_IP`.
+  Multi-host applications are rejected before any remote operation.
+- Inspection uses the Kamal SSH user and port. This initial version supports direct
+  SSH with normal OpenSSH authentication only; explicit Kamal keys, proxies and
+  other custom transport options are rejected before stopping anything.
+
+### Failure and recovery
+
+SSH or inventory errors abort the operation. Existing temporary exec containers,
+including those from removed roles, block reset while active. A failed reset leaves
+the app stopped: there is intentionally no automatic restart over partial data.
+Truncation and seeding are **not** made atomic by the gem; the command must support
+recovery from partial work.
+
+The error reports `REVIEW_RESET_VERSION=<version>`. After resolving the cause,
+retry the job with that variable; all configured role containers must still exist
+for that version. If a CI job or SSH session was interrupted, its remote exec
+container may still be running: inspect it and wait for completion before retrying.
+For a code fix, deploy the corrected image first, then reset without a stale version
+override. An image without the reset command fails and leaves the app stopped.
+
+Remote command output is suppressed in CI to avoid leaking secrets. Diagnose
+failures on the review host. Container naming follows Kamal 2; revalidate the reset
+checks when upgrading Kamal.
+
 ## Lifecycle
 
 1. **First deploy for an MR**: upsert DNS → check remote containers over SSH → `kamal setup -d review`

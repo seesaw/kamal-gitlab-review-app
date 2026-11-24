@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'fileutils'
+require_relative '../runtime_files'
 require 'open3'
 
 module KamalGitlabReviewApp
@@ -39,9 +39,7 @@ module KamalGitlabReviewApp
       private
 
       def deploy(iid:)
-        runtime_env = write_runtime_env(iid:)
-        write_secrets_review(runtime_env)
-        export_runtime_env(runtime_env)
+        RuntimeFiles.prepare(iid:)
 
         upsert_dns(iid:)
 
@@ -49,27 +47,6 @@ module KamalGitlabReviewApp
         run!('bundle', 'exec', 'kamal', 'registry', 'setup', '-d', 'review')
         run!('bundle', 'exec', 'kamal', action.to_s, '-d', 'review')
         nil
-      end
-
-      def write_runtime_env(iid:)
-        runtime_env = KamalGitlabReviewApp::RuntimeEnv.to_h(iid:)
-        FileUtils.mkdir_p('.kamal')
-        File.write('.kamal/review.env', runtime_env.map { |key, value| "#{key}=#{value}" }.join("\n") << "\n")
-        runtime_env
-      end
-
-      def write_secrets_review(runtime_env)
-        secrets_file = ENV.fetch('SECRETS_REVIEW_FILE')
-        destination = '.kamal/secrets.review'
-        FileUtils.cp(secrets_file, destination)
-        File.open(destination, 'a') do |file|
-          runtime_env.each { |key, value| file.puts "#{key}=#{value}" }
-        end
-        File.chmod(0o600, destination)
-      end
-
-      def export_runtime_env(runtime_env)
-        runtime_env.each { |key, value| ENV[key] = value }
       end
 
       def upsert_dns(iid:)

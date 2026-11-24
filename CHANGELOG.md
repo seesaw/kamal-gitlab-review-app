@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+- Add guarded `reset` lifecycle command with configurable application command, deployed-version retry, and single-host Kamal role validation.
+- Share runtime/secret preparation between deploy and reset, including templates without a trailing newline.
+
 ## 0.1.1
 
 - Fix remote Docker cleanup matching so `app_mr_1` no longer deletes `app_mr_10` resources.
