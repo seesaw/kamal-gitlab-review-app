@@ -2,6 +2,7 @@
 
 require_relative 'cli/deploy'
 require_relative 'cli/stop'
+require_relative 'cli/reset'
 
 module KamalGitlabReviewApp
   module CLI
@@ -10,6 +11,7 @@ module KamalGitlabReviewApp
 
       Commands:
         deploy              Deploy or setup the MR review app
+        reset               Reset data in the deployed review app
         stop                Tear down the MR review app (best-effort)
         runtime-env [IID]   Print runtime env for an MR IID
         decide [IID]        Decide setup vs deploy from remote container list (stdin)
@@ -31,6 +33,8 @@ module KamalGitlabReviewApp
         0
       when 'deploy'
         run_deploy
+      when 'reset'
+        run_reset
       when 'stop'
         Stop.call ? 0 : 1
       when 'runtime-env'
@@ -53,6 +57,14 @@ module KamalGitlabReviewApp
         warn USAGE
         1
       end
+    end
+
+    def run_reset
+      Reset.call
+      0
+    rescue Reset::Error => e
+      warn "kamal-gitlab-review-app reset: #{e.message}"
+      1
     end
 
     def run_deploy
